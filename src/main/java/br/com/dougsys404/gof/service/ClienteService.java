@@ -31,32 +31,53 @@ public class ClienteService {
     }
 
 
-    public void create(Cliente cliente) { salvarClienteComCep(cliente); }
+    public void create(Cliente cliente) {
+        // Verifica se já existe um cliente com esse nome (ignorando maiúsculas/minúsculas)
+        Optional<Cliente> clienteExistente = repository.findByNomeIgnoreCase(cliente.getNome());
+        if (clienteExistente.isPresent()) {
+            throw new RuntimeException("Cliente com o nome '" + cliente.getNome() + "' já está cadastrado.");
+        }
 
-    private void salvarClienteComCep(Cliente cliente) {
-        // FIXME Verificar se o Endereco do Cliente já existe (pelo CEP).
         String cep = cliente.getEndereco().getCep();
+
+        // Verifica se o endereço já existe no banco, senão busca via API
         Endereco endereco = enderecoRepository.findById(cep).orElseGet(() -> {
-            // FIXME Caso não exista, integrar com o ViaCEP e persistir o retorno.
-            Endereco novoEndereco = viaCepService.consultarCep(cep);
-            return enderecoRepository.save(novoEndereco);
+            Endereco enderecoConsultado = viaCepService.consultarCep(cep);
+            if (enderecoConsultado == null) {
+                throw new RuntimeException("Endereço não encontrado para o CEP: " + cep);
+            }
+            return enderecoRepository.save(enderecoConsultado);
         });
-        // FIXME Inserir Cliente, vinculando o Endereco (novo ou existente).
+
         cliente.setEndereco(endereco);
         repository.save(cliente);
     }
 
 
-    public void update(Long id, Cliente cliente) {
-        // FIXME Buscar Cliente por ID, caso exista:
-        Optional<Cliente> clienteToUpdate = repository.findById(id);
 
-        if (clienteToUpdate.isPresent()) salvarClienteComCep(cliente);
+    public void update(Long id, Cliente cliente) {
+        Cliente clienteExistente = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Cliente com ID " + id + " não encontrado."));
+
+        String cep = cliente.getEndereco().getCep();
+
+        Endereco endereco = enderecoRepository.findById(cep).orElseGet(() -> {
+            Endereco enderecoConsultado = viaCepService.consultarCep(cep);
+            if (enderecoConsultado == null) {
+                throw new RuntimeException("Endereço não encontrado para o CEP: " + cep);
+            }
+            return enderecoRepository.save(enderecoConsultado);
+        });
+
+        // Atualiza os dados do cliente existente
+        clienteExistente.setNome(cliente.getNome());
+        clienteExistente.setEndereco(endereco);
+
+        repository.save(clienteExistente);
     }
 
 
     public void delete(Long id){
-            // FIXME Deletar Cliente por ID.
         repository.deleteById(id);
     }
 }
